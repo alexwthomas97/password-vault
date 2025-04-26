@@ -1,7 +1,8 @@
 import os
-from flask import Flask, render_template, request, redirect, session
-import sqlite3, bcrypt
+import sqlite3
+import bcrypt
 from cryptography.fernet import Fernet
+from flask import Flask, render_template, request, redirect, session
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -16,17 +17,7 @@ with open("secret.key", "rb") as f:
 
 fernet = Fernet(key)
 
-# Ensure database and table exist
-conn = sqlite3.connect("vault.db")
-cursor = conn.cursor()
-cursor.execute('''CREATE TABLE IF NOT EXISTS master (id INTEGER PRIMARY KEY, hashed_password BLOB)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS passwords (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    encrypted_password BLOB
-)''')
-conn.commit()
-conn.close()
+# --- Routes ---
 
 @app.route("/", methods=["GET", "POST"])
 def login():
@@ -37,6 +28,7 @@ def login():
 
     if request.method == "POST":
         entered_pw = request.form["master_password"].encode("utf-8")
+
         if result:
             if bcrypt.checkpw(entered_pw, result[1]):
                 session["user"] = True
@@ -69,16 +61,12 @@ def vault():
 
     cursor.execute("SELECT id, name, encrypted_password FROM passwords")
     results = cursor.fetchall()
-    decrypted = [(row[0], row[1], fernet.decrypt(row[2]).decode("utf-8")) for row in results]
+    decrypted = [(id, name, fernet.decrypt(pw).decode("utf-8")) for id, name, pw in results]
 
     return render_template("vault.html", passwords=decrypted)
 
 @app.route("/edit/<int:id>", methods=["POST"])
 def edit(id):
-    print("🚨 Edit route triggered!")  # NEW
-    print("Received ID:", id)          # NEW
-    print("Form data:", request.form)  # NEW
-
     if not session.get("user"):
         return redirect("/")
 
@@ -86,7 +74,7 @@ def edit(id):
     new_password = request.form.get("password")
 
     if not new_name or not new_password:
-        return redirect("/vault")  # If empty, don't update
+        return redirect("/vault")
 
     encrypted = fernet.encrypt(new_password.encode("utf-8"))
 
@@ -94,7 +82,6 @@ def edit(id):
     cursor = conn.cursor()
     cursor.execute("UPDATE passwords SET name = ?, encrypted_password = ? WHERE id = ?", (new_name, encrypted, id))
     conn.commit()
-    print("✅ Updated in database!")  # Correctly placed here
     conn.close()
 
     return redirect("/vault")
@@ -108,10 +95,15 @@ def delete(id):
     cursor = conn.cursor()
     cursor.execute("DELETE FROM passwords WHERE id = ?", (id,))
     conn.commit()
+    conn.close()
+
     return redirect("/vault")
 
+# --- Final section for deployment ---
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))  # This line allows cloud deployment!
+    app.run(host="0.0.0.0", port=port)
+
 
 
 
