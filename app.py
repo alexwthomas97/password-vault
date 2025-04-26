@@ -17,6 +17,27 @@ with open("secret.key", "rb") as f:
 
 fernet = Fernet(key)
 
+# Check if vault.db exists; if not, create it
+if not os.path.exists("vault.db"):
+    conn = sqlite3.connect("vault.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE master (
+            id INTEGER PRIMARY KEY,
+            hashed_password BLOB NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE passwords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            encrypted_password BLOB NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
 # --- Routes ---
 
 @app.route("/", methods=["GET", "POST"])
